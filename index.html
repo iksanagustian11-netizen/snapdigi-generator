@@ -1,612 +1,106 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snapdigi.id - Generator Gambar & Video</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0d1117;
-            color: #c9d1d9;
-            /* Memastikan konten generator tidak terpotong */
-            overflow-y: auto !important; 
-            overflow-x: hidden !important;
-            min-height: 100vh;
-        }
-        #background-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            pointer-events: none;
-        }
-        .main-container-wrapper {
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 30px; 
-            box-sizing: border-box;
-        }
-        /* Custom scrollbar for a darker theme */
-        body::-webkit-scrollbar {
-            width: 8px;
-        }
-        body::-webkit-scrollbar-track {
-            background: #161b22;
-        }
-        body::-webkit-scrollbar-thumb {
-            background-color: #30363d;
-            border-radius: 4px;
-        }
-        body::-webkit-scrollbar-thumb:hover {
-            background-color: #484f58;
-        }
-    </style>
-</head>
-<body class="main-container-wrapper">
+// --- BAGIAN INI MENGGANTIKAN FUNGSI generateImage() LAMA ---
+async function generateImage() {
+    const prompt = imagePromptInput.value.trim();
+    const style = imageStyleSelect.value.trim();
+    const aspectRatio = imageAspectRatioSelect.value.trim();
+    // imageCount tidak digunakan, karena Gemini hanya menghasilkan 1 gambar.
+    // const imageCount = parseInt(imageCountSelect.value, 10); 
+    const referenceImageFile = imageReferenceUpload.files[0];
 
-    <canvas id="background-canvas"></canvas>
+    if (!prompt && !referenceImageFile) {
+        showMessage("Harap masukkan deskripsi atau unggah gambar referensi.");
+        return;
+    }
+    
+    if (apiKey === "") {
+        showMessage("Kesalahan: API Key kosong. Harap masukkan API Key Anda untuk menggunakan fitur ini.");
+        return;
+    }
 
-    <div class="bg-gray-800 rounded-3xl shadow-2xl p-6 md:p-10 w-full max-w-4xl border border-gray-700 relative z-10">
+    // Show loading state
+    loadingIndicator.classList.remove('hidden');
+    generateImageBtn.disabled = true;
+    downloadImageBtn.classList.add('hidden');
+    imageOutputContainer.innerHTML = '';
+    lastGeneratedImageData = [];
 
-        <header class="text-center mb-10">
-            <h1 class="text-5xl md:text-6xl font-extrabold text-blue-400 tracking-wider animate-pulse">
-                snapdigi.id
-            </h1>
-            <p class="mt-2 text-xl md:text-2xl text-gray-400">Generator Gambar & Video Cepat</p>
-        </header>
-
-        <div id="loading" class="hidden flex items-center justify-center my-6">
-            <div class="animate-spin rounded-full h-10 w-10 border-t-4 border-blue-500 border-solid"></div>
-            <span class="ml-4 text-gray-400">Membuat konten...</span>
-        </div>
+    try {
+        // SELALU gunakan endpoint Gemini untuk memaksimalkan peluang akses gratis.
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
         
-        <div id="message-box" class="hidden fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-50">
-            <div class="bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-700 max-w-sm text-center">
-                <p id="message-text" class="text-gray-200 mb-4"></p>
-                <button onclick="hideMessage()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-full transition-colors duration-200">Tutup</button>
-            </div>
-        </div>
+        let parts = [];
+        let finalPrompt = prompt;
 
-        <main class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            
-            <section class="bg-gray-700 rounded-2xl p-6 shadow-inner border border-gray-600">
-                <h2 class="text-3xl font-bold mb-4 text-gray-200">Generator Gambar</h2>
-                <div class="mb-4">
-                    <label for="image-prompt" class="block text-gray-400 mb-2">Deskripsi Gambar:</label>
-                    <input type="text" id="image-prompt" placeholder="Misalnya: robot lucu di hutan yang penuh bunga" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div>
-                        <label for="image-style" class="block text-gray-400 mb-2">Gaya:</label>
-                        <select id="image-style" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">(Opsional) Pilih Gaya</option>
-                            <option value="gaya anime">Anime</option>
-                            <option value="gaya fotorealistik">Fotorealistik</option>
-                            <option value="gaya fantasi">Fantasi</option>
-                            <option value="gaya seni digital">Seni Digital</option>
-                            <option value="gaya minimalis">Minimalis</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="image-aspect-ratio" class="block text-gray-400 mb-2">Aspek Rasio:</label>
-                        <select id="image-aspect-ratio" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">(Opsional) Pilih Rasio</option>
-                            <option value="rasio 1:1">Persegi (1:1)</option>
-                            <option value="rasio 16:9 lanskap">Lanskap (16:9)</option>
-                            <option value="rasio 9:16 potret">Potret (9:16)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="image-count" class="block text-gray-400 mb-2">Jumlah Gambar:</label>
-                        <select id="image-count" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="1">1</option>
-                            <option value="2">2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
-                            <option value="5">5</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="mb-6">
-                    <label for="image-reference-upload" class="block text-gray-400 mb-2">Unggah Referensi Gambar:</label>
-                    <input type="file" id="image-reference-upload" accept="image/*" class="w-full text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600">
-                    <div id="image-reference-preview-container" class="mt-4 hidden justify-center">
-                        <img id="image-reference-preview" src="" alt="Referensi Gambar" class="w-full h-auto rounded-lg shadow-xl border border-gray-600">
-                    </div>
-                </div>
-
-                <div class="flex flex-col sm:flex-row gap-4">
-                    <button id="generate-image-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-colors duration-200 shadow-md">Buat Gambar</button>
-                    <button id="download-image-btn" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-xl transition-colors duration-200 shadow-md hidden">Unduh Gambar</button>
-                </div>
-                
-                <div id="image-output" class="mt-6 flex flex-col items-center gap-4">
-                    <img class="w-full h-auto rounded-lg shadow-xl border border-gray-600" src="https://placehold.co/400x400/1f2937/d1d5db?text=Gambar+Anda+Akan+Muncul+Disini" alt="Gambar yang Dibuat">
-                </div>
-            </section>
-
-            <section class="bg-gray-700 rounded-2xl p-6 shadow-inner border border-gray-600">
-                <h2 class="text-3xl font-bold mb-4 text-gray-200">Generator Video</h2>
-                <div class="mb-4">
-                    <label for="video-mode" class="block text-gray-400 mb-2">Pilih Mode:</label>
-                    <select id="video-mode" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="text">Teks ke Video</option>
-                        <option value="image">Gambar ke Video</option>
-                    </select>
-                </div>
-                
-                <div id="video-input-container">
-                    <div id="text-to-video-input">
-                        <label for="video-prompt" class="block text-gray-400 mb-2">Deskripsi Video:</label>
-                        <input type="text" id="video-prompt" placeholder="Misalnya: pemandangan pegunungan yang tertutup salju" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div id="image-to-video-input" class="hidden">
-                        <label for="video-reference-upload" class="block text-gray-400 mb-2">Unggah Referensi Gambar:</label>
-                        <input type="file" id="video-reference-upload" accept="image/*" class="w-full text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600">
-                        <div id="video-reference-preview-container" class="mt-4 hidden justify-center">
-                            <img id="video-reference-preview" src="" alt="Referensi Gambar" class="w-full h-auto rounded-lg shadow-xl border border-gray-600">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
-                    <div>
-                        <label for="video-style" class="block text-gray-400 mb-2">Gaya:</label>
-                        <select id="video-style" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">(Opsional) Pilih Gaya</option>
-                            <option value="gaya film">Gaya Film</option>
-                            <option value="gaya dokumenter">Gaya Dokumenter</option>
-                            <option value="gaya animasi 3D">Gaya Animasi 3D</option>
-                            <option value="gaya retro">Gaya Retro</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="video-aspect-ratio" class="block text-gray-400 mb-2">Aspek Rasio:</label>
-                        <select id="video-aspect-ratio" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">(Opsional) Pilih Rasio</option>
-                            <option value="rasio 1:1">Persegi (1:1)</option>
-                            <option value="rasio 16:9 lanskap">Lanskap (16:9)</option>
-                            <option value="rasio 9:16 potret">Potret (9:16)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="mb-6">
-                    <label for="video-count" class="block text-gray-400 mb-2">Jumlah Video:</label>
-                    <select id="video-count" class="w-full p-3 rounded-lg bg-gray-600 text-gray-200 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                    </select>
-                </div>
-
-                <div class="flex flex-col sm:flex-row gap-4">
-                    <button id="generate-video-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-colors duration-200 shadow-md">Buat Video</button>
-                    <button id="download-video-btn" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-xl transition-colors duration-200 shadow-md hidden">Unduh Video</button>
-                </div>
-                
-                <div id="video-output" class="mt-6 flex flex-col items-center gap-4">
-                    <p id="video-placeholder" class="text-gray-400 text-center">Video Anda Akan Muncul Disini.</p>
-                </div>
-            </section>
-
-        </main>
-    </div>
-
-    <script>
-        // API key for fetching from the model.
-        // API KEY YANG TELAH DIMASUKKAN:
-        const apiKey = "AIzaSyATGFNgQWQCd7OWYi2GIF9vfoMf-dqV84I"; 
+        if (style) { finalPrompt += `, ${style}`; }
+        if (aspectRatio) { finalPrompt += `, ${aspectRatio}`; }
         
-        const imagePromptInput = document.getElementById('image-prompt');
-        const imageStyleSelect = document.getElementById('image-style');
-        const imageAspectRatioSelect = document.getElementById('image-aspect-ratio');
-        const imageCountSelect = document.getElementById('image-count');
-        const generateImageBtn = document.getElementById('generate-image-btn');
-        const downloadImageBtn = document.getElementById('download-image-btn');
-        const imageOutputContainer = document.getElementById('image-output');
-        const imageReferenceUpload = document.getElementById('image-reference-upload');
-        const imageReferencePreview = document.getElementById('image-reference-preview');
-        const imageReferencePreviewContainer = document.getElementById('image-reference-preview-container');
-        let lastGeneratedImageData = [];
+        parts.push({ text: finalPrompt });
 
-        const videoPromptInput = document.getElementById('video-prompt');
-        const videoStyleSelect = document.getElementById('video-style');
-        const videoAspectRatioSelect = document.getElementById('video-aspect-ratio');
-        const videoCountSelect = document.getElementById('video-count');
-        const videoModeSelect = document.getElementById('video-mode');
-        const generateVideoBtn = document.getElementById('generate-video-btn');
-        const downloadVideoBtn = document.getElementById('download-video-btn');
-        const videoOutputContainer = document.getElementById('video-output');
-        const videoPlaceholder = document.getElementById('video-placeholder');
-        const textToVideoInput = document.getElementById('text-to-video-input');
-        const imageToVideoInput = document.getElementById('image-to-video-input');
-        const videoReferenceUpload = document.getElementById('video-reference-upload');
-        const videoReferencePreview = document.getElementById('video-reference-preview');
-        const videoReferencePreviewContainer = document.getElementById('video-reference-preview-container');
+        if (referenceImageFile) {
+            const base64Data = await fileToBase64(referenceImageFile);
+            const imageMimeType = referenceImageFile.type;
 
-
-        const loadingIndicator = document.getElementById('loading');
-        const messageBox = document.getElementById('message-box');
-        const messageText = document.getElementById('message-text');
-
-        // Function to show a custom message box
-        function showMessage(message) {
-            messageText.textContent = message;
-            messageBox.classList.remove('hidden');
-        }
-
-        // Function to hide the custom message box
-        function hideMessage() {
-            messageBox.classList.add('hidden');
-        }
-
-        // Function to convert file to base64
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = error => reject(error);
-                reader.readAsDataURL(file);
+            parts.push({
+                inlineData: {
+                    mimeType: imageMimeType,
+                    data: base64Data
+                }
             });
         }
-
-        // --- BAGIAN INI MENGGANTIKAN FUNGSI generateImage() LAMA ---
-        async function generateImage() {
-            const prompt = imagePromptInput.value.trim();
-            const style = imageStyleSelect.value.trim();
-            const aspectRatio = imageAspectRatioSelect.value.trim();
-            // imageCount tidak digunakan, karena Gemini hanya menghasilkan 1 gambar.
-            // const imageCount = parseInt(imageCountSelect.value, 10); 
-            const referenceImageFile = imageReferenceUpload.files[0];
-
-            if (!prompt && !referenceImageFile) {
-                showMessage("Harap masukkan deskripsi atau unggah gambar referensi.");
-                return;
-            }
-            
-            if (apiKey === "") {
-                showMessage("Kesalahan: API Key kosong. Harap masukkan API Key Anda untuk menggunakan fitur ini.");
-                return;
-            }
-
-            // Show loading state
-            loadingIndicator.classList.remove('hidden');
-            generateImageBtn.disabled = true;
-            downloadImageBtn.classList.add('hidden');
-            imageOutputContainer.innerHTML = '';
-            lastGeneratedImageData = [];
-
-            try {
-                // SELALU gunakan endpoint Gemini untuk memaksimalkan peluang akses gratis.
-                // Menggantikan panggilan Imagen yang berbayar.
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
-                
-                let parts = [];
-                let finalPrompt = prompt;
-
-                if (style) { finalPrompt += `, ${style}`; }
-                if (aspectRatio) { finalPrompt += `, ${aspectRatio}`; }
-                
-                parts.push({ text: finalPrompt });
-
-                if (referenceImageFile) {
-                    const base64Data = await fileToBase64(referenceImageFile);
-                    const imageMimeType = referenceImageFile.type;
-
-                    parts.push({
-                        inlineData: {
-                            mimeType: imageMimeType,
-                            data: base64Data
-                        }
-                    });
-                }
-                
-                const payload = {
-                    contents: [{ parts: parts }],
-                    generationConfig: {
-                        // Konfigurasi penting: Minta model untuk menghasilkan gambar.
-                        responseModalities: ["IMAGE"] 
-                    }
-                };
-
-                console.log('Sending request to:', apiUrl);
-                console.log('Payload:', payload);
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    const errorJson = await response.json();
-                    throw new Error(`HTTP error! status: ${response.status}. Detail: ${errorJson.error?.message || 'Unknown error'}`);
-                }
-
-                const result = await response.json();
-                
-                // Ekstraksi data gambar dari respons Gemini
-                const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-                
-                if (base64Data) {
-                    // Karena Gemini hanya mengembalikan 1 gambar, kita hanya mengambil satu hasil.
-                    lastGeneratedImageData = [base64Data]; 
-
-                    const imgElement = document.createElement('img');
-                    imgElement.src = `data:image/png;base64,${base64Data}`;
-                    imgElement.alt = `Generated Image 1`;
-                    imgElement.className = "w-full h-auto rounded-lg shadow-xl border border-gray-600";
-                    imageOutputContainer.appendChild(imgElement);
-
-                    downloadImageBtn.classList.remove('hidden');
-                } else {
-                    throw new Error("Tidak ada gambar yang dihasilkan. Model mungkin tidak dapat membuat gambar berdasarkan prompt Anda, atau batas penggunaan gratis telah tercapai.");
-                }
-
-            } catch (error) {
-                console.error('Error generating image:', error);
-                // Menampilkan pesan yang lebih user-friendly untuk masalah billing/kuota
-                if (error.message.includes('status: 400') && error.message.includes('billed users')) {
-                    showMessage("Gagal membuat gambar. API yang lebih canggih (Imagen/Video API) mungkin memerlukan akun yang mengaktifkan penagihan. Harap periksa kuota penggunaan gratis Anda.");
-                } else {
-                    showMessage("Gagal membuat gambar: " + error.message);
-                }
-            } finally {
-                loadingIndicator.classList.add('hidden');
-                generateImageBtn.disabled = false;
-            }
-        }
-        // --- AKHIR BAGIAN generateImage() YANG DIPERBARUI ---
-
-
-        // Function to handle video generation (Placeholder)
-        async function generateVideo() {
-            const videoMode = videoModeSelect.value;
-            const style = videoStyleSelect.value.trim();
-            const aspectRatio = videoAspectRatioSelect.value.trim();
-            const videoCount = parseInt(videoCountSelect.value, 10);
-            
-            let finalPrompt = "";
-            if (videoMode === 'text') {
-                const prompt = videoPromptInput.value.trim();
-                if (!prompt) {
-                    showMessage("Harap masukkan deskripsi untuk video.");
-                    return;
-                }
-                finalPrompt = prompt;
-            } else if (videoMode === 'image') {
-                const referenceImageFile = videoReferenceUpload.files[0];
-                if (!referenceImageFile) {
-                    showMessage("Harap unggah gambar referensi untuk video.");
-                    return;
-                }
-                finalPrompt = `Video berdasarkan gambar ini.`; // Placeholder prompt
-                console.log("Image for video generation uploaded:", referenceImageFile.name);
-            }
-            
-            if (style) { finalPrompt += `, ${style}`; }
-            if (aspectRatio) { finalPrompt += `, ${aspectRatio}`; }
-
-            // Show loading state
-            loadingIndicator.classList.remove('hidden');
-            generateVideoBtn.disabled = true;
-            downloadVideoBtn.classList.add('hidden');
-            videoOutputContainer.innerHTML = '';
-            videoPlaceholder.classList.add('hidden');
-
-            // Simulating video generation with a delay
-            const placeholderVideoUrl = "https://commondatestorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-
-            try {
-                // await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate API call delay
-                
-                // Pesan peringatan karena API video tidak tersedia
-                showMessage("Model video (Vidsync/Video API) belum tersedia secara publik. Kami akan menampilkan video placeholder.");
-
-                for (let i = 0; i < videoCount; i++) {
-                    const videoElement = document.createElement('video');
-                    videoElement.src = placeholderVideoUrl;
-                    videoElement.controls = true;
-                    videoElement.className = "w-full h-auto rounded-lg shadow-xl border border-gray-600";
-                    videoOutputContainer.appendChild(videoElement);
-                }
-                
-                downloadVideoBtn.classList.remove('hidden');
-            } catch (error) {
-                console.error('Error generating video:', error);
-                showMessage("Gagal membuat video: " + error.message);
-            } finally {
-                loadingIndicator.classList.add('hidden');
-                generateVideoBtn.disabled = false;
-            }
-        }
         
-        function downloadImage() {
-            if (lastGeneratedImageData.length === 0) {
-                showMessage("Tidak ada gambar untuk diunduh.");
-                return;
+        const payload = {
+            contents: [{ parts: parts }],
+            generationConfig: {
+                // Konfigurasi penting: Minta model untuk menghasilkan gambar.
+                responseModalities: ["IMAGE"] 
             }
-
-            const imageCount = lastGeneratedImageData.length;
-            if (imageCount === 1) {
-                const base64Data = lastGeneratedImageData[0];
-                const link = document.createElement('a');
-                link.href = `data:image/png;base64,${base64Data}`;
-                link.download = `snapdigi-image-${Date.now()}.png`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            } else {
-                showMessage("Mengunduh banyak gambar. Ini mungkin memakan waktu.");
-                
-                lastGeneratedImageData.forEach((base64Data, index) => {
-                    setTimeout(() => {
-                        const link = document.createElement('a');
-                        link.href = `data:image/png;base64,${base64Data}`;
-                        link.download = `snapdigi-image-${index + 1}-${Date.now()}.png`;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    }, index * 500);
-                });
-                showMessage("Semua gambar telah diunduh!");
-            }
-        }
-
-        // Placeholder function for video download
-        function downloadVideo() {
-            const videos = videoOutputContainer.querySelectorAll('video');
-            if (videos.length === 0) {
-                showMessage("Tidak ada video untuk diunduh.");
-                return;
-            }
-
-            showMessage("Fungsi unduh video sedang dalam pengembangan. Silakan coba nanti.");
-        }
-
-        // UI Logic
-        imageReferenceUpload.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    imageReferencePreview.src = e.target.result;
-                    imageReferencePreviewContainer.classList.remove('hidden');
-                    imageReferencePreviewContainer.classList.add('flex');
-                };
-                reader.readAsDataURL(file);
-            } else {
-                imageReferencePreview.src = '';
-                imageReferencePreviewContainer.classList.add('hidden');
-                imageReferencePreviewContainer.classList.remove('flex');
-            }
-        });
-
-        videoModeSelect.addEventListener('change', (event) => {
-            if (event.target.value === 'text') {
-                textToVideoInput.classList.remove('hidden');
-                imageToVideoInput.classList.add('hidden');
-                videoReferencePreviewContainer.classList.add('hidden');
-                videoReferenceUpload.value = null; // Clear file input
-            } else {
-                textToVideoInput.classList.add('hidden');
-                imageToVideoInput.classList.remove('hidden');
-            }
-        });
-
-        videoReferenceUpload.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    videoReferencePreview.src = e.target.result;
-                    videoReferencePreviewContainer.classList.remove('hidden');
-                    videoReferencePreviewContainer.classList.add('flex');
-                };
-                reader.readAsDataURL(file);
-            } else {
-                videoReferencePreview.src = '';
-                videoReferencePreviewContainer.classList.add('hidden');
-                videoReferencePreviewContainer.classList.remove('flex');
-            }
-        });
-
-
-        // Event Listeners
-        generateImageBtn.addEventListener('click', generateImage);
-        generateVideoBtn.addEventListener('click', generateVideo);
-        downloadImageBtn.addEventListener('click', downloadImage);
-        downloadVideoBtn.addEventListener('click', downloadVideo);
-
-        // --- Background Animation Script ---
-        window.onload = function() {
-            const canvas = document.getElementById('background-canvas');
-            const ctx = canvas.getContext('2d');
-            let stars = [];
-            const starCount = 500;
-            const colors = ['#a0a0ff', '#c0c0ff', '#e0e0ff']; // Blue, light blue, and white for a neon effect
-
-            function resizeCanvas() {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            }
-            window.addEventListener('resize', resizeCanvas);
-            resizeCanvas();
-
-            // Create a gradient for the background
-            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            gradient.addColorStop(0, '#000033'); // Dark blue
-            gradient.addColorStop(0.5, '#4B0082'); // Indigo/purple
-            gradient.addColorStop(1, '#000000'); // Black
-
-            class Star {
-                constructor() {
-                    this.x = Math.random() * canvas.width;
-                    this.y = Math.random() * canvas.height;
-                    this.size = Math.random() * 2 + 0.5;
-                    this.speed = Math.random() * 0.2 + 0.05;
-                    this.color = colors[Math.floor(Math.random() * colors.length)];
-                }
-
-                draw() {
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                    ctx.fillStyle = this.color;
-                    ctx.shadowColor = this.color;
-                    ctx.shadowBlur = this.size * 2 + 5; // Add blur for the neon glow
-                    ctx.fill();
-                }
-
-                update() {
-                    this.y -= this.speed;
-
-                    // Reset star to the bottom when it moves off the top of the canvas
-                    if (this.y < 0) {
-                        this.x = Math.random() * canvas.width;
-                        this.y = canvas.height;
-                        this.size = Math.random() * 2 + 0.5;
-                        this.speed = Math.random() * 0.2 + 0.05;
-                    }
-                }
-            }
-
-            function init() {
-                stars = [];
-                for (let i = 0; i < starCount; i++) {
-                    stars.push(new Star());
-                }
-            }
-            init();
-
-            function animate() {
-                // Draw the galaxy gradient background
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                // Draw the glowing stars
-                stars.forEach(star => {
-                    star.update();
-                    star.draw();
-                });
-                
-                requestAnimationFrame(animate);
-            }
-
-            animate();
         };
+
+        console.log('Sending request to:', apiUrl);
+        console.log('Payload:', payload);
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorJson = await response.json();
+            throw new Error(`HTTP error! status: ${response.status}. Detail: ${errorJson.error?.message || 'Unknown error'}`);
+        }
+
+        const result = await response.json();
         
-    </script>
-</body>
-</html>
+        // Ekstraksi data gambar dari respons Gemini
+        const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+        
+        if (base64Data) {
+            // Karena Gemini hanya mengembalikan 1 gambar, kita hanya mengambil satu hasil.
+            lastGeneratedImageData = [base64Data]; 
+
+            const imgElement = document.createElement('img');
+            imgElement.src = `data:image/png;base64,${base64Data}`;
+            imgElement.alt = `Generated Image 1`;
+            imgElement.className = "w-full h-auto rounded-lg shadow-xl border border-gray-600";
+            imageOutputContainer.appendChild(imgElement);
+
+            downloadImageBtn.classList.remove('hidden');
+        } else {
+            throw new Error("Tidak ada gambar yang dihasilkan. Model mungkin tidak dapat membuat gambar berdasarkan prompt Anda, atau batas penggunaan gratis telah tercapai.");
+        }
+
+    } catch (error) {
+        console.error('Error generating image:', error);
+        // Menampilkan pesan yang lebih user-friendly untuk masalah billing/kuota
+        if (error.message.includes('status: 400') && error.message.includes('billed users')) {
+            showMessage("Gagal membuat gambar. API yang lebih canggih (Imagen/Video API) mungkin memerlukan akun yang mengaktifkan penagihan. Harap periksa kuota penggunaan gratis Anda.");
+        } else {
+            showMessage("Gagal membuat gambar: " + error.message);
+        }
+    } finally {
+        loadingIndicator.classList.add('hidden');
+        generateImageBtn.disabled = false;
+    }
+}
+// --- AKHIR BAGIAN generateImage() YANG DIPERBARUI ---
