@@ -262,12 +262,13 @@
             });
         }
 
-        // Function to handle image generation
+        // --- BAGIAN INI MENGGANTIKAN FUNGSI generateImage() LAMA ---
         async function generateImage() {
             const prompt = imagePromptInput.value.trim();
             const style = imageStyleSelect.value.trim();
             const aspectRatio = imageAspectRatioSelect.value.trim();
-            const imageCount = parseInt(imageCountSelect.value, 10);
+            // imageCount tidak digunakan, karena Gemini hanya menghasilkan 1 gambar.
+            // const imageCount = parseInt(imageCountSelect.value, 10); 
             const referenceImageFile = imageReferenceUpload.files[0];
 
             if (!prompt && !referenceImageFile) {
@@ -276,7 +277,6 @@
             }
             
             if (apiKey === "") {
-                // Seharusnya tidak terjadi lagi karena API Key sudah dimasukkan
                 showMessage("Kesalahan: API Key kosong. Harap masukkan API Key Anda untuk menggunakan fitur ini.");
                 return;
             }
@@ -289,19 +289,21 @@
             lastGeneratedImageData = [];
 
             try {
-                // Construct the payload based on whether an image is uploaded
-                let payload = {};
-                let apiUrl = "";
+                // SELALU gunakan endpoint Gemini untuk memaksimalkan peluang akses gratis.
+                // Menggantikan panggilan Imagen yang berbayar.
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+                
+                let parts = [];
+                let finalPrompt = prompt;
+
+                if (style) { finalPrompt += `, ${style}`; }
+                if (aspectRatio) { finalPrompt += `, ${aspectRatio}`; }
+                
+                parts.push({ text: finalPrompt });
 
                 if (referenceImageFile) {
                     const base64Data = await fileToBase64(referenceImageFile);
                     const imageMimeType = referenceImageFile.type;
-                    // Using gemini-2.5-flash for multimodal image-to-image/text
-                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
-                    
-                    let parts = [{ text: prompt }];
-                    if (style) { parts.push({ text: `in ${style}` }); }
-                    if (aspectRatio) { parts.push({ text: `with ${aspectRatio}` }); }
 
                     parts.push({
                         inlineData: {
@@ -309,44 +311,22 @@
                             data: base64Data
                         }
                     });
-
-                    payload = {
-                        contents: [{
-                            parts: parts
-                        }],
-                        generationConfig: {
-                            responseModalities: ["IMAGE"]
-                        }
-                    };
-                    // Note: 'sampleCount' is not a supported parameter for the generateContent method.
-                    // The API will return only one image.
-                } else {
-                    // Using Imagen for text-to-image generation
-                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-generate-002:predict?key=${apiKey}`;
-                    
-                    let finalPrompt = prompt;
-                    if (style) { finalPrompt += `, ${style}`; }
-                    if (aspectRatio) { finalPrompt += `, ${aspectRatio}`; }
-
-                    payload = {
-                        instances: [{
-                            prompt: finalPrompt
-                        }],
-                        parameters: {
-                            "sampleCount": imageCount
-                        }
-                    };
                 }
                 
-                // Add logging for debugging purposes
+                const payload = {
+                    contents: [{ parts: parts }],
+                    generationConfig: {
+                        // Konfigurasi penting: Minta model untuk menghasilkan gambar.
+                        responseModalities: ["IMAGE"] 
+                    }
+                };
+
                 console.log('Sending request to:', apiUrl);
                 console.log('Payload:', payload);
 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
@@ -357,40 +337,39 @@
 
                 const result = await response.json();
                 
-                if (referenceImageFile) {
-                    const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-                    if (base64Data) {
-                        lastGeneratedImageData.push(base64Data);
-                    } else {
-                        throw new Error("Tidak ada gambar yang dihasilkan. Coba deskripsi lain.");
-                    }
-                } else {
-                    if (result.predictions && result.predictions.length > 0) {
-                        lastGeneratedImageData = result.predictions.map(pred => pred.bytesBase64Encoded);
-                    } else {
-                        throw new Error("Tidak ada gambar yang dihasilkan. Coba deskripsi lain.");
-                    }
-                }
+                // Ekstraksi data gambar dari respons Gemini
+                const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                
+                if (base64Data) {
+                    // Karena Gemini hanya mengembalikan 1 gambar, kita hanya mengambil satu hasil.
+                    lastGeneratedImageData = [base64Data]; 
 
-                lastGeneratedImageData.forEach((base64Data, index) => {
                     const imgElement = document.createElement('img');
                     imgElement.src = `data:image/png;base64,${base64Data}`;
-                    imgElement.alt = `Generated Image ${index + 1}`;
+                    imgElement.alt = `Generated Image 1`;
                     imgElement.className = "w-full h-auto rounded-lg shadow-xl border border-gray-600";
                     imageOutputContainer.appendChild(imgElement);
-                });
 
-                downloadImageBtn.classList.remove('hidden');
+                    downloadImageBtn.classList.remove('hidden');
+                } else {
+                    throw new Error("Tidak ada gambar yang dihasilkan. Model mungkin tidak dapat membuat gambar berdasarkan prompt Anda, atau batas penggunaan gratis telah tercapai.");
+                }
 
             } catch (error) {
                 console.error('Error generating image:', error);
-                showMessage("Gagal membuat gambar: " + error.message);
+                // Menampilkan pesan yang lebih user-friendly untuk masalah billing/kuota
+                if (error.message.includes('status: 400') && error.message.includes('billed users')) {
+                    showMessage("Gagal membuat gambar. API yang lebih canggih (Imagen/Video API) mungkin memerlukan akun yang mengaktifkan penagihan. Harap periksa kuota penggunaan gratis Anda.");
+                } else {
+                    showMessage("Gagal membuat gambar: " + error.message);
+                }
             } finally {
-                // Hide loading state
                 loadingIndicator.classList.add('hidden');
                 generateImageBtn.disabled = false;
             }
         }
+        // --- AKHIR BAGIAN generateImage() YANG DIPERBARUI ---
+
 
         // Function to handle video generation (Placeholder)
         async function generateVideo() {
@@ -414,7 +393,6 @@
                     return;
                 }
                 finalPrompt = `Video berdasarkan gambar ini.`; // Placeholder prompt
-                // In a real implementation, the image data would be sent to the API
                 console.log("Image for video generation uploaded:", referenceImageFile.name);
             }
             
@@ -429,16 +407,13 @@
             videoPlaceholder.classList.add('hidden');
 
             // Simulating video generation with a delay
-            // NOTE: The video generation model API is not yet publically available.
-            // This is a placeholder that shows a pre-existing video.
             const placeholderVideoUrl = "https://commondatestorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
 
             try {
                 // await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate API call delay
                 
-                // Since the video API is not public, we show a message and the placeholder video.
-                showMessage("Model video (Vidsync) belum tersedia secara publik melalui API. Kami akan menampilkan video placeholder.");
-
+                // Pesan peringatan karena API video tidak tersedia
+                showMessage("Model video (Vidsync/Video API) belum tersedia secara publik. Kami akan menampilkan video placeholder.");
 
                 for (let i = 0; i < videoCount; i++) {
                     const videoElement = document.createElement('video');
@@ -635,5 +610,3 @@
     </script>
 </body>
 </html>
-
-
