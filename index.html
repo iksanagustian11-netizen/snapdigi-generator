@@ -322,7 +322,7 @@
                     // The API will return only one image.
                 } else {
                     // Using Imagen for text-to-image generation
-                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-generate-002:predict?key=${apiKey}`;
                     
                     let finalPrompt = prompt;
                     if (style) { finalPrompt += `, ${style}`; }
@@ -635,4 +635,5 @@
     </script>
 </body>
 </html>
+
 
