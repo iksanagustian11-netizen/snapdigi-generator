@@ -206,8 +206,8 @@
 
     <script>
         // API key for fetching from the model.
-        // NOTE: The user must insert their actual API key here.
-        const apiKey = ""; // <-- GANTI DENGAN API KEY ANDA (jika Anda ingin menjalankannya di luar Google Colab/Canvas)
+        // API KEY YANG TELAH DIMASUKKAN:
+        const apiKey = "AIzaSyByYFqv8VXF-6ziSLbZZDOmesEDFYz6sPM"; 
         
         const imagePromptInput = document.getElementById('image-prompt');
         const imageStyleSelect = document.getElementById('image-style');
@@ -276,6 +276,7 @@
             }
             
             if (apiKey === "") {
+                // Seharusnya tidak terjadi lagi karena API Key sudah dimasukkan
                 showMessage("Kesalahan: API Key kosong. Harap masukkan API Key Anda untuk menggunakan fitur ini.");
                 return;
             }
